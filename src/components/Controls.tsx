@@ -205,17 +205,6 @@ export function Controls({
 
   return (
     <aside className="controls">
-      {onHidePanel && (
-        <div className="controls-head">
-          <button
-            type="button"
-            className="panel-toggle-btn"
-            onClick={onHidePanel}
-          >
-            {t('editor.hidePanel')}
-          </button>
-        </div>
-      )}
       <div className="control-tabs">
         {TAB_KEYS.map((tab) => (
           <button
@@ -231,6 +220,16 @@ export function Controls({
             {t(tab.label)}
           </button>
         ))}
+        {onHidePanel && (
+          <button
+            type="button"
+            className="panel-toggle-btn"
+            onClick={onHidePanel}
+            title={t('editor.hidePanel')}
+          >
+            ⟨
+          </button>
+        )}
       </div>
 
       {state.activeTab === 'files' && (

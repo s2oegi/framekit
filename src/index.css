@@ -17,16 +17,16 @@ html[data-theme='night'] {
 }
 
 html[data-theme='day'] {
-  --ink: #efe8dc;
+  --ink: #f4f0e8;
   --panel: #ffffff;
-  --panel-2: #f7f1e6;
-  --line: rgba(28, 33, 48, 0.14);
-  --text: #161922;
-  --muted: #5b6475;
-  --accent: #c47a08;
-  --accent-dim: rgba(196, 122, 8, 0.14);
-  --glow-a: #f5d7a1;
-  --glow-b: #d7e4f5;
+  --panel-2: #fbf8f2;
+  --line: rgba(28, 33, 48, 0.12);
+  --text: #141820;
+  --muted: #667085;
+  --accent: #d4890a;
+  --accent-dim: rgba(212, 137, 10, 0.14);
+  --glow-a: #ffe4b5;
+  --glow-b: #e4eefc;
   color-scheme: light;
 }
 
@@ -148,24 +148,26 @@ html[data-theme='day'] .mode-glow {
   color: var(--muted);
 }
 
-html[data-theme='day'] .controls,
-html[data-theme='day'] .editor-top,
-html[data-theme='day'] .modal,
-html[data-theme='day'] .video-toolbar,
-html[data-theme='day'] .video-inspector {
-  background: rgba(255, 255, 255, 0.92);
-}
-
-html[data-theme='day'] .chip,
-html[data-theme='day'] .header-btn,
-html[data-theme='day'] .control-tab,
-html[data-theme='day'] .template-tile-btn,
-html[data-theme='day'] .shape-tile {
-  background: #fff;
-}
-
 html[data-theme='day'] .logo-mark {
-  box-shadow: 0 0 18px rgba(196, 122, 8, 0.28);
+  box-shadow: 0 0 18px rgba(212, 137, 10, 0.28);
+}
+
+html[data-theme='day'] .control-section {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+html[data-theme='day'] .panel-reopen {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 8px 24px rgba(20, 24, 35, 0.12);
+}
+
+html[data-theme='day'] .template-tile-btn:hover {
+  box-shadow: 0 10px 24px rgba(20, 24, 35, 0.12);
+}
+
+html[data-theme='day'] .mode-recent-item,
+html[data-theme='day'] .mode-card {
+  background: rgba(255, 255, 255, 0.88);
 }
 
 @keyframes pulse {
@@ -313,9 +315,10 @@ html[data-theme='day'] .logo-mark {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.9rem 1.25rem;
+  gap: 0.75rem;
+  padding: 0.75rem 1.1rem;
   border-bottom: 1px solid var(--line);
-  background: rgba(12, 14, 18, 0.92);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
   backdrop-filter: blur(10px);
   flex-shrink: 0;
   z-index: 5;
@@ -357,7 +360,7 @@ html[data-theme='day'] .logo-mark {
 .editor-body {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) min(20rem, 100%);
+  grid-template-columns: minmax(0, 1fr) min(24rem, 38vw);
   gap: 0;
   min-height: 0;
   overflow: hidden;
@@ -436,11 +439,11 @@ html[data-theme='day'] .logo-mark {
 
 .controls {
   border-left: 1px solid var(--line);
-  background: rgba(21, 24, 33, 0.9);
-  padding: 1.25rem 1.15rem 2rem;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  padding: 0.9rem 1rem 1.75rem;
   display: flex;
   flex-direction: column;
-  gap: 1.35rem;
+  gap: 1.1rem;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -450,22 +453,23 @@ html[data-theme='day'] .logo-mark {
 
 .control-tabs {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 0.35rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+  gap: 0.3rem;
   position: sticky;
   top: 0;
   z-index: 2;
-  background: rgba(21, 24, 33, 0.96);
-  padding-bottom: 0.35rem;
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  padding: 0.15rem 0 0.5rem;
+  backdrop-filter: blur(8px);
 }
 
 .control-tab {
   appearance: none;
   border: 1px solid var(--line);
-  background: var(--ink);
+  background: var(--panel-2);
   border-radius: 0.5rem;
   padding: 0.45rem 0.25rem;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--muted);
 }
@@ -490,8 +494,8 @@ html[data-theme='day'] .logo-mark {
 
 .template-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.65rem;
+  grid-template-columns: 1fr;
+  gap: 0.7rem;
 }
 
 .template-tile {
@@ -504,7 +508,7 @@ html[data-theme='day'] .logo-mark {
 .template-tile-btn {
   appearance: none;
   border: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(28, 33, 48, 0.95), var(--ink));
+  background: var(--panel-2);
   border-radius: 0.75rem;
   padding: 0;
   overflow: hidden;
@@ -621,20 +625,24 @@ html[data-theme='day'] .logo-mark {
 .template-tile-meta {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.55rem 0.6rem 0.65rem;
+  gap: 0.2rem;
+  padding: 0.65rem 0.75rem 0.75rem;
 }
 
 .template-tile-meta strong {
-  font-size: 0.82rem;
+  font-size: 0.86rem;
   color: var(--text);
-  line-height: 1.2;
+  line-height: 1.25;
 }
 
 .template-tile-meta span {
-  font-size: 0.7rem;
+  font-size: 0.74rem;
   color: var(--muted);
-  line-height: 1.3;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .template-tile-delete {
@@ -812,7 +820,7 @@ html[data-theme='day'] .logo-mark {
 .header-btn {
   appearance: none;
   border: 1px solid var(--line);
-  background: var(--ink);
+  background: var(--panel-2);
   color: var(--muted);
   border-radius: 0.5rem;
   padding: 0.4rem 0.65rem;
@@ -1099,7 +1107,7 @@ html[data-theme='day'] .logo-mark {
 .control-section {
   border: 1px solid var(--line);
   border-radius: 0.65rem;
-  background: rgba(0, 0, 0, 0.18);
+  background: color-mix(in srgb, var(--panel-2) 80%, transparent);
   padding: 0.35rem 0.55rem 0.65rem;
 }
 
@@ -1142,23 +1150,20 @@ html[data-theme='day'] .logo-mark {
 }
 
 .controls-head {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.35rem;
-  margin: -0.25rem 0 -0.35rem;
+  display: none;
 }
 
 .panel-toggle-btn {
   appearance: none;
   border: 1px solid var(--line);
-  background: var(--ink);
+  background: var(--panel-2);
   color: var(--muted);
-  border-radius: 0.45rem;
-  padding: 0.3rem 0.55rem;
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.5rem;
   font-size: 0.72rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .panel-toggle-btn:hover {
@@ -1344,7 +1349,7 @@ html[data-theme='day'] .logo-mark {
 .chip {
   appearance: none;
   border: 1px solid var(--line);
-  background: var(--ink);
+  background: var(--panel-2);
   border-radius: 0.55rem;
   padding: 0.5rem 0.7rem;
   display: inline-flex;

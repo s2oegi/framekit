@@ -553,11 +553,11 @@ export const defaultEditorState = (
     frameColor: '#F5A524',
     frameWidth: 16,
     frameInset: 24,
-    showGrid: false,
-    snapToGrid: true,
-    gridSize: 64,
-    gridOpacity: 0.35,
-    centerGuides: true,
+  showGrid: false,
+  snapToGrid: true,
+  gridSize: 64,
+  gridOpacity: 0.35,
+  centerGuides: false,
     shapes: [],
     texts: [
       createTextLayer(kind, {
