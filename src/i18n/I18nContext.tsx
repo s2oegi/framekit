@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -30,8 +31,8 @@ function readStoredLocale(): Locale {
   } catch {
     // ignore
   }
-  const nav = navigator.language.toLowerCase()
-  return nav.startsWith('hu') ? 'hu' : 'en'
+  // Default language is English
+  return 'en'
 }
 
 function format(
@@ -47,6 +48,10 @@ function format(
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(() => readStoredLocale())
 
+  useEffect(() => {
+    document.documentElement.lang = locale
+  }, [locale])
+
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next)
     try {
@@ -54,7 +59,6 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     } catch {
       // ignore
     }
-    document.documentElement.lang = next
   }, [])
 
   const t = useCallback(

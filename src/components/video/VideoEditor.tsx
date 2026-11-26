@@ -29,7 +29,7 @@ import {
   type VideoSource,
 } from '../../video/types'
 import { useI18n } from '../../i18n/I18nContext'
-import { LanguageToggle } from '../LanguageToggle'
+import { useSettings } from '../../settings/SettingsContext'
 import { VideoPreview } from './VideoPreview'
 import { VideoTimeline } from './VideoTimeline'
 import { VideoToolbar } from './VideoToolbar'
@@ -61,6 +61,7 @@ function loadVideoMeta(
 
 export function VideoEditor({ onBack }: Props) {
   const { t, te } = useI18n()
+  const { openSettings } = useSettings()
   const [project, setProject] = useState<VideoProject>(() => emptyVideoProject())
   const fileRef = useRef<HTMLInputElement>(null)
   const projectRef = useRef(project)
@@ -581,7 +582,13 @@ export function VideoEditor({ onBack }: Props) {
           <span className="beta-badge">{t('video.beta')}</span>
         </div>
         <div className="editor-actions">
-          <LanguageToggle compact />
+          <button
+            type="button"
+            className="header-btn"
+            onClick={openSettings}
+          >
+            {t('common.settings')}
+          </button>
           <span className="field-note">{t('video.betaNote')}</span>
         </div>
       </header>

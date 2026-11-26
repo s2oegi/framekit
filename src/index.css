@@ -1,4 +1,5 @@
-:root {
+:root,
+html[data-theme='night'] {
   --ink: #0c0e12;
   --panel: #151821;
   --panel-2: #1c2130;
@@ -7,9 +8,26 @@
   --muted: #9aa3b5;
   --accent: #f5a524;
   --accent-dim: rgba(245, 165, 36, 0.16);
+  --glow-a: #2a1c08;
+  --glow-b: #142033;
   --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
   --font-body: 'IBM Plex Sans', system-ui, sans-serif;
+  --ui-brightness: 1;
   color-scheme: dark;
+}
+
+html[data-theme='day'] {
+  --ink: #efe8dc;
+  --panel: #ffffff;
+  --panel-2: #f7f1e6;
+  --line: rgba(28, 33, 48, 0.14);
+  --text: #161922;
+  --muted: #5b6475;
+  --accent: #c47a08;
+  --accent-dim: rgba(196, 122, 8, 0.14);
+  --glow-a: #f5d7a1;
+  --glow-b: #d7e4f5;
+  color-scheme: light;
 }
 
 *,
@@ -25,15 +43,34 @@ body,
   min-height: 100%;
 }
 
+html {
+  filter: brightness(var(--ui-brightness, 1));
+}
+
 body {
   margin: 0;
   font-family: var(--font-body);
   color: var(--text);
   background:
-    radial-gradient(ellipse 80% 50% at 10% -10%, #2a1c08 0%, transparent 55%),
-    radial-gradient(ellipse 60% 40% at 100% 0%, #142033 0%, transparent 50%),
+    radial-gradient(ellipse 80% 50% at 10% -10%, var(--glow-a) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 40% at 100% 0%, var(--glow-b) 0%, transparent 50%),
     var(--ink);
   -webkit-font-smoothing: antialiased;
+  transition:
+    background 0.25s ease,
+    color 0.25s ease;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 button,
@@ -84,6 +121,51 @@ button {
   transform: translateX(-50%);
   pointer-events: none;
   animation: pulse 6s ease-in-out infinite;
+}
+
+html[data-theme='day'] .mode-glow {
+  background: radial-gradient(circle, rgba(196, 122, 8, 0.2), transparent 65%);
+}
+
+.settings-modal {
+  max-width: 24rem;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 1rem;
+}
+
+.settings-section h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+html[data-theme='day'] .controls,
+html[data-theme='day'] .editor-top,
+html[data-theme='day'] .modal,
+html[data-theme='day'] .video-toolbar,
+html[data-theme='day'] .video-inspector {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+html[data-theme='day'] .chip,
+html[data-theme='day'] .header-btn,
+html[data-theme='day'] .control-tab,
+html[data-theme='day'] .template-tile-btn,
+html[data-theme='day'] .shape-tile {
+  background: #fff;
+}
+
+html[data-theme='day'] .logo-mark {
+  box-shadow: 0 0 18px rgba(196, 122, 8, 0.28);
 }
 
 @keyframes pulse {

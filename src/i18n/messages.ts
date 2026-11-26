@@ -23,6 +23,16 @@ const hu = {
   'common.busy': 'Pillanat…',
   'common.muted': 'némítva',
   'common.none': 'Nincs',
+  'common.settings': 'Beállítások',
+
+  'settings.title': 'Beállítások',
+  'settings.language': 'Nyelv',
+  'settings.theme': 'Téma',
+  'settings.themeDay': 'Nappali',
+  'settings.themeNight': 'Éjszakai',
+  'settings.themeNote': 'A nappali világos, az éjszakai sötét megjelenés.',
+  'settings.brightness': 'Fényerő',
+  'settings.brightnessReset': 'Alap fényerő (100%)',
 
   'home.lead':
     'Thumbnail, banner és videóvágás egy helyen — YouTubereknek és vágóknak.',
@@ -261,6 +271,16 @@ const en: Record<MessageKey, string> = {
   'common.busy': 'One moment…',
   'common.muted': 'muted',
   'common.none': 'None',
+  'common.settings': 'Settings',
+
+  'settings.title': 'Settings',
+  'settings.language': 'Language',
+  'settings.theme': 'Theme',
+  'settings.themeDay': 'Day',
+  'settings.themeNight': 'Night',
+  'settings.themeNote': 'Day is a light look, night is the dark look.',
+  'settings.brightness': 'Brightness',
+  'settings.brightnessReset': 'Reset brightness (100%)',
 
   'home.lead':
     'Thumbnails, banners and video editing in one place — for YouTubers and editors.',

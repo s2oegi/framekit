@@ -19,8 +19,8 @@ import { useI18n } from '../i18n/I18nContext'
 import { AuthModal } from './AuthModal'
 import { CanvasPreview } from './CanvasPreview'
 import { Controls } from './Controls'
-import { LanguageToggle } from './LanguageToggle'
 import { ShortcutsHelp } from './ShortcutsHelp'
+import { useSettings } from '../settings/SettingsContext'
 
 type Props = {
   kind: ProjectKind
@@ -38,6 +38,7 @@ export function Editor({
   initialProject = null,
 }: Props) {
   const { t, te, locale } = useI18n()
+  const { openSettings } = useSettings()
   const initial =
     initialProject?.state ??
     defaultEditorState(initialProject?.kind ?? kind, locale)
@@ -406,7 +407,13 @@ export function Editor({
           </span>
         </div>
         <div className="editor-actions">
-          <LanguageToggle compact />
+          <button
+            type="button"
+            className="header-btn"
+            onClick={openSettings}
+          >
+            {t('common.settings')}
+          </button>
           <button type="button" className="header-btn" onClick={undo} title="⌘Z">
             {t('common.undo')}
           </button>

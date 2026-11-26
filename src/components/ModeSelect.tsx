@@ -3,7 +3,7 @@ import type { ProjectKind } from '../presets'
 import type { SavedProject } from '../lib/projectStore'
 import { listProjects } from '../lib/projectStore'
 import { useI18n } from '../i18n/I18nContext'
-import { LanguageToggle } from './LanguageToggle'
+import { useSettings } from '../settings/SettingsContext'
 
 type Props = {
   session: Session | null
@@ -23,6 +23,7 @@ export function ModeSelect({
   onOpenProject,
 }: Props) {
   const { t } = useI18n()
+  const { openSettings } = useSettings()
   const recent = listProjects(session?.userId ?? null).slice(0, 4)
 
   return (
@@ -30,7 +31,13 @@ export function ModeSelect({
       <div className="mode-glow" aria-hidden />
 
       <div className="mode-account">
-        <LanguageToggle />
+        <button
+          type="button"
+          className="header-btn"
+          onClick={openSettings}
+        >
+          {t('common.settings')}
+        </button>
         {session ? (
           <>
             <span className="mode-user">{session.displayName}</span>
