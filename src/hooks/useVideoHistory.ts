@@ -5,11 +5,19 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react'
-import type { VideoClip, VideoProject } from '../video/types'
+import type {
+  BrollClip,
+  VideoClip,
+  VideoProject,
+  VideoSelection,
+  VideoTextOverlay,
+} from '../video/types'
 
 type Snapshot = {
   clips: VideoClip[]
-  selectedClipId: string | null
+  broll: BrollClip[]
+  texts: VideoTextOverlay[]
+  selected: VideoSelection
   markIn: number | null
   markOut: number | null
   playhead: number
@@ -23,7 +31,9 @@ function takeSnapshot(project: VideoProject): Snapshot {
       ...c,
       transition: { ...c.transition },
     })),
-    selectedClipId: project.selectedClipId,
+    broll: project.broll.map((c) => ({ ...c })),
+    texts: project.texts.map((t) => ({ ...t })),
+    selected: project.selected ? { ...project.selected } : null,
     markIn: project.markIn,
     markOut: project.markOut,
     playhead: project.playhead,
@@ -34,7 +44,9 @@ function applySnapshot(project: VideoProject, snap: Snapshot): VideoProject {
   return {
     ...project,
     clips: snap.clips,
-    selectedClipId: snap.selectedClipId,
+    broll: snap.broll,
+    texts: snap.texts,
+    selected: snap.selected,
     markIn: snap.markIn,
     markOut: snap.markOut,
     playhead: snap.playhead,
@@ -87,10 +99,17 @@ export function useVideoHistory(
     })
   }, [setProject, bump])
 
+  const resetHistory = useCallback(() => {
+    past.current = []
+    future.current = []
+    bump()
+  }, [bump])
+
   return {
     commit,
     undo,
     redo,
+    resetHistory,
     canUndo: past.current.length > 0,
     canRedo: future.current.length > 0,
     version,

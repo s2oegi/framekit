@@ -5,6 +5,7 @@ import {
   useState,
   type PointerEvent as REPointerEvent,
 } from 'react'
+import { brollEnd } from '../../video/broll'
 import { layoutClips, transitionShortKey } from '../../video/mix'
 import { useI18n } from '../../i18n/I18nContext'
 import {
@@ -13,13 +14,22 @@ import {
   snapTime,
   totalDuration,
 } from '../../video/timeline'
-import { type VideoClip, type VideoProject } from '../../video/types'
+import {
+  clipDuration,
+  selectedClipId,
+  type BrollClip,
+  type VideoClip,
+  type VideoProject,
+  type VideoSelection,
+  type VideoTextOverlay,
+} from '../../video/types'
 import { VideoClipInspector } from './VideoClipInspector'
+import { VideoOverlayInspector } from './VideoOverlayInspector'
 
 type Props = {
   project: VideoProject
   pxPerSec: number
-  onSelectClip: (id: string | null) => void
+  onSelect: (sel: VideoSelection) => void
   onPlayhead: (t: number) => void
   onTrimClip: (
     clipId: string,
@@ -28,6 +38,12 @@ type Props = {
   onSlipClip: (clipId: string, deltaSec: number) => void
   onRollEdit: (leftIndex: number, deltaSec: number) => void
   onPatchClip: (clipId: string, patch: Partial<VideoClip>) => void
+  onPatchBroll: (id: string, patch: Partial<BrollClip>) => void
+  onPatchText: (id: string, patch: Partial<VideoTextOverlay>) => void
+  onMoveBroll: (id: string, timelineStart: number) => void
+  onMoveText: (id: string, start: number) => void
+  onDeleteBroll: (id: string) => void
+  onDeleteText: (id: string) => void
 }
 
 type DragKind =
@@ -49,6 +65,26 @@ type DragKind =
       leftIndex: number
       startX: number
     }
+  | {
+      type: 'broll-move'
+      id: string
+      startX: number
+      origStart: number
+    }
+  | {
+      type: 'broll-trim-in' | 'broll-trim-out'
+      id: string
+      startX: number
+      origIn: number
+      origOut: number
+      origStart: number
+    }
+  | {
+      type: 'text-move'
+      id: string
+      startX: number
+      origStart: number
+    }
 
 function buildRuler(total: number, pxPerSec: number) {
   const marks: { t: number; major: boolean }[] = []
@@ -69,12 +105,18 @@ function buildRuler(total: number, pxPerSec: number) {
 export function VideoTimeline({
   project,
   pxPerSec,
-  onSelectClip,
+  onSelect,
   onPlayhead,
   onTrimClip,
   onSlipClip,
   onRollEdit,
   onPatchClip,
+  onPatchBroll,
+  onPatchText,
+  onMoveBroll,
+  onMoveText,
+  onDeleteBroll,
+  onDeleteText,
 }: Props) {
   const { t } = useI18n()
   const trackRef = useRef<HTMLDivElement>(null)
@@ -82,9 +124,14 @@ export function VideoTimeline({
   const lastSlipX = useRef(0)
   const lastRollX = useRef(0)
   const [viewportW, setViewportW] = useState(480)
-  const total = totalDuration(project.clips)
+  const mainTotal = totalDuration(project.clips)
+  let span = mainTotal
+  for (const b of project.broll) span = Math.max(span, brollEnd(b))
+  for (const tx of project.texts) span = Math.max(span, tx.end)
+  const total = Math.max(span, 0.01)
   const width = Math.max(total * pxPerSec + 48, viewportW)
   const layout = layoutClips(project.clips)
+  const clipSel = selectedClipId(project)
 
   useEffect(() => {
     const el = trackRef.current
@@ -100,7 +147,6 @@ export function VideoTimeline({
     [total, pxPerSec],
   )
 
-  // Keep playhead visible while playing / scrubbing
   useEffect(() => {
     const el = trackRef.current
     if (!el || total <= 0) return
@@ -133,12 +179,13 @@ export function VideoTimeline({
   function onTrackPointerDown(e: REPointerEvent<HTMLDivElement>) {
     if (
       (e.target as HTMLElement).closest(
-        '.video-clip, .video-roll, .video-audio-lane',
+        '.video-clip, .video-roll, .video-audio-lane, .video-broll-clip, .video-text-clip',
       )
     ) {
       return
     }
     dragRef.current = { type: 'playhead' }
+    onSelect(null)
     onPlayhead(timeFromClientX(e.clientX))
     e.currentTarget.setPointerCapture(e.pointerId)
   }
@@ -164,6 +211,38 @@ export function VideoTimeline({
       if (Math.abs(dx) > 0) onRollEdit(drag.leftIndex, dx)
       return
     }
+
+    if (drag.type === 'broll-move') {
+      const dx = (e.clientX - drag.startX) / pxPerSec
+      onMoveBroll(drag.id, Math.max(0, drag.origStart + dx))
+      return
+    }
+
+    if (drag.type === 'text-move') {
+      const dx = (e.clientX - drag.startX) / pxPerSec
+      onMoveText(drag.id, Math.max(0, drag.origStart + dx))
+      return
+    }
+
+    if (drag.type === 'broll-trim-in' || drag.type === 'broll-trim-out') {
+      const dx = (e.clientX - drag.startX) / pxPerSec
+      if (drag.type === 'broll-trim-in') {
+        onPatchBroll(drag.id, {
+          inPoint: drag.origIn + dx,
+          outPoint: drag.origOut,
+          timelineStart: drag.origStart + dx,
+        })
+      } else {
+        onPatchBroll(drag.id, {
+          inPoint: drag.origIn,
+          outPoint: drag.origOut + dx,
+          timelineStart: drag.origStart,
+        })
+      }
+      return
+    }
+
+    if (drag.type !== 'trim-in' && drag.type !== 'trim-out') return
 
     const dx = (e.clientX - drag.startX) / pxPerSec
     const clip = project.clips.find((c) => c.id === drag.clipId)
@@ -200,7 +279,7 @@ export function VideoTimeline({
   ) {
     e.stopPropagation()
     e.preventDefault()
-    onSelectClip(clip.id)
+    onSelect({ type: 'clip', id: clip.id })
     dragRef.current = {
       type: edge === 'in' ? 'trim-in' : 'trim-out',
       clipId: clip.id,
@@ -214,7 +293,7 @@ export function VideoTimeline({
   function startSlip(e: REPointerEvent<HTMLDivElement>, clip: VideoClip) {
     if (!e.altKey) return false
     e.stopPropagation()
-    onSelectClip(clip.id)
+    onSelect({ type: 'clip', id: clip.id })
     dragRef.current = { type: 'slip', clipId: clip.id, startX: e.clientX }
     lastSlipX.current = e.clientX
     trackRef.current?.setPointerCapture(e.pointerId)
@@ -238,6 +317,10 @@ export function VideoTimeline({
       ? Math.max(project.markIn, project.markOut)
       : project.markOut
 
+  const showClipInspector = project.selected?.type === 'clip'
+  const showOverlayInspector =
+    project.selected?.type === 'broll' || project.selected?.type === 'text'
+
   return (
     <div className="video-timeline">
       <div className="video-timeline-label">
@@ -248,10 +331,12 @@ export function VideoTimeline({
         <span className="field-note">{t('video.timelineHint')}</span>
       </div>
 
-      <div className="video-timeline-shell">
-        <div className="video-track-labels" aria-hidden>
+      <div className="video-timeline-shell video-timeline-shell-multi">
+        <div className="video-track-labels video-track-labels-multi" aria-hidden>
           <span>V1</span>
           <span>A1</span>
+          <span>B1</span>
+          <span>T1</span>
         </div>
 
         <div
@@ -262,7 +347,10 @@ export function VideoTimeline({
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
         >
-          <div className="video-timeline-track" style={{ width }}>
+          <div
+            className="video-timeline-track video-timeline-track-multi"
+            style={{ width }}
+          >
             <div className="video-ruler">
               {ruler.map((m) => (
                 <div
@@ -309,7 +397,7 @@ export function VideoTimeline({
               const { clip, start, end, overlapOut, index: i } = item
               const left = start * pxPerSec
               const w = Math.max((end - start) * pxPerSec, 28)
-              const selected = project.selectedClipId === clip.id
+              const selected = clipSel === clip.id
               const source = getSource(project, clip.sourceId)
               const shortKey = transitionShortKey(clip.transition.type)
               const transLabel = shortKey ? t(shortKey) : ''
@@ -329,7 +417,7 @@ export function VideoTimeline({
                     onPointerDown={(e) => {
                       if (startSlip(e, clip)) return
                       e.stopPropagation()
-                      onSelectClip(clip.id)
+                      onSelect({ type: 'clip', id: clip.id })
                       onPlayhead(timeFromClientX(e.clientX))
                       dragRef.current = { type: 'playhead' }
                       trackRef.current?.setPointerCapture(e.pointerId)
@@ -426,6 +514,123 @@ export function VideoTimeline({
               )
             })}
 
+            <div className="video-broll-lane" aria-label={t('video.broll')}>
+              {project.broll.map((clip) => {
+                const left = clip.timelineStart * pxPerSec
+                const w = Math.max(clipDuration(clip) * pxPerSec, 24)
+                const selected =
+                  project.selected?.type === 'broll' &&
+                  project.selected.id === clip.id
+                const source = getSource(project, clip.sourceId)
+                const shortName = source
+                  ? source.name.replace(/\.[^.]+$/, '')
+                  : t('video.broll')
+                return (
+                  <div
+                    key={clip.id}
+                    className={
+                      selected
+                        ? 'video-broll-clip video-broll-clip-selected'
+                        : 'video-broll-clip'
+                    }
+                    style={{
+                      left,
+                      width: w,
+                      opacity: 0.55 + clip.opacity * 0.45,
+                    }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation()
+                      onSelect({ type: 'broll', id: clip.id })
+                      dragRef.current = {
+                        type: 'broll-move',
+                        id: clip.id,
+                        startX: e.clientX,
+                        origStart: clip.timelineStart,
+                      }
+                      trackRef.current?.setPointerCapture(e.pointerId)
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className="video-trim video-trim-in"
+                      aria-label={t('video.trimIn')}
+                      onPointerDown={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                        onSelect({ type: 'broll', id: clip.id })
+                        dragRef.current = {
+                          type: 'broll-trim-in',
+                          id: clip.id,
+                          startX: e.clientX,
+                          origIn: clip.inPoint,
+                          origOut: clip.outPoint,
+                          origStart: clip.timelineStart,
+                        }
+                        trackRef.current?.setPointerCapture(e.pointerId)
+                      }}
+                    />
+                    <div className="video-clip-body">
+                      <strong>{shortName}</strong>
+                      <span>{formatTime(clipDuration(clip))}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="video-trim video-trim-out"
+                      aria-label={t('video.trimOut')}
+                      onPointerDown={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                        onSelect({ type: 'broll', id: clip.id })
+                        dragRef.current = {
+                          type: 'broll-trim-out',
+                          id: clip.id,
+                          startX: e.clientX,
+                          origIn: clip.inPoint,
+                          origOut: clip.outPoint,
+                          origStart: clip.timelineStart,
+                        }
+                        trackRef.current?.setPointerCapture(e.pointerId)
+                      }}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="video-text-lane" aria-label={t('video.textOverlay')}>
+              {project.texts.map((tx) => {
+                const left = tx.start * pxPerSec
+                const w = Math.max((tx.end - tx.start) * pxPerSec, 24)
+                const selected =
+                  project.selected?.type === 'text' &&
+                  project.selected.id === tx.id
+                return (
+                  <div
+                    key={tx.id}
+                    className={
+                      selected
+                        ? 'video-text-clip video-text-clip-selected'
+                        : 'video-text-clip'
+                    }
+                    style={{ left, width: w }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation()
+                      onSelect({ type: 'text', id: tx.id })
+                      dragRef.current = {
+                        type: 'text-move',
+                        id: tx.id,
+                        startX: e.clientX,
+                        origStart: tx.start,
+                      }
+                      trackRef.current?.setPointerCapture(e.pointerId)
+                    }}
+                  >
+                    <strong>{tx.text || t('video.textOverlay')}</strong>
+                  </div>
+                )
+              })}
+            </div>
+
             {total > 0 && (
               <div
                 className="video-playhead"
@@ -436,15 +641,25 @@ export function VideoTimeline({
         </div>
       </div>
 
-      {project.selectedClipId ? (
+      {showClipInspector ? (
         <VideoClipInspector
           project={project}
           onTrimClip={onTrimClip}
           onSlipClip={onSlipClip}
           onPatchClip={onPatchClip}
         />
+      ) : showOverlayInspector ? (
+        <VideoOverlayInspector
+          project={project}
+          onPatchBroll={onPatchBroll}
+          onPatchText={onPatchText}
+          onDeleteBroll={onDeleteBroll}
+          onDeleteText={onDeleteText}
+        />
       ) : (
-        project.clips.length > 0 && (
+        (project.clips.length > 0 ||
+          project.broll.length > 0 ||
+          project.texts.length > 0) && (
           <p className="video-inspector-hint">{t('video.selectHint')}</p>
         )
       )}

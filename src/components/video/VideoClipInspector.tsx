@@ -7,6 +7,7 @@ import {
 import {
   TRANSITION_OPTIONS,
   clipDuration,
+  selectedClipId,
   type TransitionType,
   type VideoClip,
   type VideoProject,
@@ -30,7 +31,8 @@ export function VideoClipInspector({
   onPatchClip,
 }: Props) {
   const { t } = useI18n()
-  const clip = project.clips.find((c) => c.id === project.selectedClipId)
+  const clipId = selectedClipId(project)
+  const clip = project.clips.find((c) => c.id === clipId)
   if (!clip) return null
   const source = getSource(project, clip.sourceId)
   if (!source) return null

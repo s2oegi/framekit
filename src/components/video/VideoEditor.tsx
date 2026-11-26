@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useVideoHistory } from '../../hooks/useVideoHistory'
 import {
+  loadVideoProject,
+  saveVideoProject,
+} from '../../lib/videoProjectStore'
+import {
+  patchBroll,
+  projectSpan,
+  pruneSourcesWithOverlays,
+  trimBroll,
+} from '../../video/broll'
+import {
   duplicateClip,
   extractRange,
   findClipAtPlayhead,
@@ -22,15 +32,23 @@ import {
   trimClip,
 } from '../../video/timeline'
 import {
+  createBrollFromSource,
+  createTextOverlay,
   emptyVideoProject,
   nextVideoId,
+  selectedClipId,
+  type BrollClip,
   type VideoClip,
   type VideoProject,
+  type VideoSelection,
   type VideoSource,
+  type VideoTextOverlay,
 } from '../../video/types'
 import { useI18n } from '../../i18n/I18nContext'
 import { useSettings } from '../../settings/SettingsContext'
+import { VideoMediaPanel } from './VideoMediaPanel'
 import { VideoPreview } from './VideoPreview'
+import { VideoProjectsPanel } from './VideoProjectsPanel'
 import { VideoTimeline } from './VideoTimeline'
 import { VideoToolbar } from './VideoToolbar'
 
@@ -40,8 +58,9 @@ type Props = {
 
 function loadVideoMeta(
   file: File,
-): Promise<{ objectUrl: string; duration: number }> {
-  const objectUrl = URL.createObjectURL(file)
+): Promise<{ objectUrl: string; duration: number; blob: Blob }> {
+  const blob: Blob = file
+  const objectUrl = URL.createObjectURL(blob)
   return new Promise((resolve, reject) => {
     const video = document.createElement('video')
     video.preload = 'metadata'
@@ -49,6 +68,7 @@ function loadVideoMeta(
       resolve({
         objectUrl,
         duration: Number.isFinite(video.duration) ? video.duration : 0,
+        blob,
       })
     }
     video.onerror = () => {
@@ -59,30 +79,39 @@ function loadVideoMeta(
   })
 }
 
+function revokeAll(sources: VideoSource[]) {
+  for (const s of sources) URL.revokeObjectURL(s.objectUrl)
+}
+
 export function VideoEditor({ onBack }: Props) {
   const { t, te } = useI18n()
   const { openSettings } = useSettings()
   const [project, setProject] = useState<VideoProject>(() => emptyVideoProject())
+  const [sideTab, setSideTab] = useState<'media' | 'projects'>('media')
+  const [saveStatus, setSaveStatus] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [listKey, setListKey] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
   const projectRef = useRef(project)
-  const { commit, undo, redo, canUndo, canRedo } = useVideoHistory(setProject)
+  const { commit, undo, redo, resetHistory, canUndo, canRedo } =
+    useVideoHistory(setProject)
 
   useEffect(() => {
     projectRef.current = project
   }, [project])
 
-  const setPlayhead = useCallback((t: number, opts?: { snap?: boolean }) => {
+  const setPlayhead = useCallback((time: number, opts?: { snap?: boolean }) => {
     setProject((prev) => {
       const shouldSnap = opts?.snap ?? (!prev.isPlaying && prev.snap)
+      const span = projectSpan(prev)
       const snapped = snapTime(
-        t,
+        time,
         prev.clips,
         shouldSnap,
         0.12,
         [prev.markIn ?? -1, prev.markOut ?? -1].filter((n) => n >= 0),
       )
-      const total = totalDuration(prev.clips)
-      const playhead = Math.max(0, Math.min(snapped, total || 0))
+      const playhead = Math.max(0, Math.min(snapped, span || 0))
       if (Math.abs(playhead - prev.playhead) < 0.0005) return prev
       return { ...prev, playhead }
     })
@@ -94,31 +123,44 @@ export function VideoEditor({ onBack }: Props) {
     )
   }, [])
 
+  const setSelection = useCallback((selected: VideoSelection) => {
+    setProject((prev) => {
+      const same =
+        (prev.selected == null && selected == null) ||
+        (prev.selected?.type === selected?.type &&
+          prev.selected?.id === selected?.id)
+      return same ? prev : { ...prev, selected }
+    })
+  }, [])
+
   async function onImport(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
     if (!files.length) return
     try {
       const loaded: VideoSource[] = []
       for (const file of files) {
-        const { objectUrl, duration } = await loadVideoMeta(file)
+        const { objectUrl, duration, blob } = await loadVideoMeta(file)
         loaded.push({
           id: nextVideoId('src'),
           name: file.name,
           objectUrl,
           duration,
+          blob,
         })
       }
 
       commit((prev) => {
         const empty = prev.clips.length === 0
         if (empty) {
-          for (const s of prev.sources) URL.revokeObjectURL(s.objectUrl)
+          revokeAll(prev.sources)
           const clips = loaded.map((s) => makeClipFromSource(s))
           return {
             ...prev,
             sources: loaded,
             clips,
-            selectedClipId: clips[0]?.id ?? null,
+            broll: [],
+            texts: [],
+            selected: clips[0] ? { type: 'clip', id: clips[0].id } : null,
             playhead: 0,
             isPlaying: false,
             markIn: null,
@@ -128,11 +170,11 @@ export function VideoEditor({ onBack }: Props) {
 
         let clips = prev.clips
         const sources = [...prev.sources, ...loaded]
-        let selectedId: string | null = prev.selectedClipId
+        let selected: VideoSelection = prev.selected
         loaded.forEach((src, i) => {
           const clip = makeClipFromSource(src)
           if (i === 0) {
-            selectedId = clip.id
+            selected = { type: 'clip', id: clip.id }
             clips = insertClipAtPlayhead(
               clips,
               prev.playhead,
@@ -147,23 +189,22 @@ export function VideoEditor({ onBack }: Props) {
           ...prev,
           sources,
           clips,
-          selectedClipId: selectedId,
+          selected,
           isPlaying: false,
         }
       })
+      setSideTab('media')
     } catch (err) {
-      alert(
-        err instanceof Error ? te(err.message) : t('video.loadFailed'),
-      )
+      alert(err instanceof Error ? te(err.message) : t('video.loadFailed'))
     }
     e.target.value = ''
   }
 
   const togglePlay = useCallback(() => {
     setProject((prev) => {
-      if (!prev.clips.length) return prev
-      const total = totalDuration(prev.clips)
-      if (!prev.isPlaying && prev.playhead >= total - 0.05) {
+      const span = projectSpan(prev)
+      if (span <= 0) return prev
+      if (!prev.isPlaying && prev.playhead >= span - 0.05) {
         return { ...prev, playhead: 0, isPlaying: true }
       }
       return { ...prev, isPlaying: !prev.isPlaying }
@@ -182,7 +223,9 @@ export function VideoEditor({ onBack }: Props) {
       return {
         ...prev,
         clips: nextClips,
-        selectedClipId: hit?.clip.id ?? prev.selectedClipId,
+        selected: hit
+          ? { type: 'clip', id: hit.clip.id }
+          : prev.selected,
         isPlaying: false,
       }
     })
@@ -190,25 +233,45 @@ export function VideoEditor({ onBack }: Props) {
 
   const handleDelete = useCallback(() => {
     commit((prev) => {
-      if (!prev.selectedClipId) return prev
-      return rippleDeleteClip(prev, prev.selectedClipId)
+      const sel = prev.selected
+      if (!sel) return prev
+      if (sel.type === 'clip') return rippleDeleteClip(prev, sel.id)
+      if (sel.type === 'broll') {
+        const broll = prev.broll.filter((c) => c.id !== sel.id)
+        return {
+          ...prev,
+          broll,
+          sources: pruneSourcesWithOverlays(
+            prev.sources,
+            prev.clips,
+            broll,
+            false,
+          ),
+          selected: null,
+          isPlaying: false,
+        }
+      }
+      return {
+        ...prev,
+        texts: prev.texts.filter((tx) => tx.id !== sel.id),
+        selected: null,
+        isPlaying: false,
+      }
     })
   }, [commit])
 
   const handleDuplicate = useCallback(() => {
     commit((prev) => {
-      if (!prev.selectedClipId) return prev
-      const next = duplicateClip(
-        prev.clips,
-        prev.selectedClipId,
-        nextVideoId('clip'),
-      )
+      const id = selectedClipId(prev)
+      if (!id) return prev
+      const next = duplicateClip(prev.clips, id, nextVideoId('clip'))
       if (!next) return prev
-      const idx = next.findIndex((c) => c.id === prev.selectedClipId)
+      const idx = next.findIndex((c) => c.id === id)
+      const newId = next[idx + 1]?.id
       return {
         ...prev,
         clips: next,
-        selectedClipId: next[idx + 1]?.id ?? prev.selectedClipId,
+        selected: newId ? { type: 'clip', id: newId } : prev.selected,
         isPlaying: false,
       }
     })
@@ -274,8 +337,9 @@ export function VideoEditor({ onBack }: Props) {
 
   function handleMove(dir: -1 | 1) {
     commit((prev) => {
-      if (!prev.selectedClipId) return prev
-      const clips = moveClip(prev.clips, prev.selectedClipId, dir)
+      const id = selectedClipId(prev)
+      if (!id) return prev
+      const clips = moveClip(prev.clips, id, dir)
       if (clips === prev.clips) return prev
       return { ...prev, clips, isPlaying: false }
     })
@@ -295,10 +359,133 @@ export function VideoEditor({ onBack }: Props) {
     else setProject(apply)
   }
 
+  function handlePatchBroll(id: string, patch: Partial<BrollClip>) {
+    setProject((prev) => {
+      const clip = prev.broll.find((c) => c.id === id)
+      if (!clip) return prev
+      const source = prev.sources.find((s) => s.id === clip.sourceId)
+      if (!source) return prev
+      const next = trimBroll(
+        { ...clip, ...patch },
+        {
+          inPoint: patch.inPoint,
+          outPoint: patch.outPoint,
+          timelineStart: patch.timelineStart,
+        },
+        source.duration,
+      )
+      const merged = {
+        ...next,
+        opacity: patch.opacity ?? next.opacity,
+        volume: patch.volume ?? next.volume,
+        muted: patch.muted ?? next.muted,
+      }
+      return {
+        ...prev,
+        broll: patchBroll(prev.broll, id, merged),
+        isPlaying: false,
+      }
+    })
+  }
+
+  function handlePatchText(id: string, patch: Partial<VideoTextOverlay>) {
+    setProject((prev) => ({
+      ...prev,
+      texts: prev.texts.map((tx) => {
+        if (tx.id !== id) return tx
+        const next = { ...tx, ...patch }
+        if (next.end <= next.start + 0.15) next.end = next.start + 0.15
+        return next
+      }),
+      isPlaying: false,
+    }))
+  }
+
+  function handleMoveBroll(id: string, timelineStart: number) {
+    setProject((prev) => ({
+      ...prev,
+      broll: patchBroll(prev.broll, id, {
+        timelineStart: Math.max(0, timelineStart),
+      }),
+      isPlaying: false,
+    }))
+  }
+
+  function handleMoveText(id: string, start: number) {
+    setProject((prev) => {
+      const tx = prev.texts.find((c) => c.id === id)
+      if (!tx) return prev
+      const dur = tx.end - tx.start
+      const nextStart = Math.max(0, start)
+      return {
+        ...prev,
+        texts: prev.texts.map((c) =>
+          c.id === id
+            ? { ...c, start: nextStart, end: nextStart + dur }
+            : c,
+        ),
+        isPlaying: false,
+      }
+    })
+  }
+
+  const addText = useCallback(() => {
+    commit((prev) => {
+      const tx = createTextOverlay(prev.playhead, projectSpan(prev))
+      return {
+        ...prev,
+        texts: [...prev.texts, tx],
+        selected: { type: 'text', id: tx.id },
+        isPlaying: false,
+      }
+    })
+  }, [commit])
+
+  const addSourceToMain = useCallback(
+    (sourceId: string) => {
+      commit((prev) => {
+        const source = prev.sources.find((s) => s.id === sourceId)
+        if (!source) return prev
+        const clip = makeClipFromSource(source)
+        const clips = insertClipAtPlayhead(
+          prev.clips,
+          prev.playhead,
+          clip,
+          nextVideoId('clip'),
+        )
+        return {
+          ...prev,
+          clips,
+          selected: { type: 'clip', id: clip.id },
+          isPlaying: false,
+        }
+      })
+    },
+    [commit],
+  )
+
+  const addSourceToBroll = useCallback(
+    (sourceId: string) => {
+      commit((prev) => {
+        const source = prev.sources.find((s) => s.id === sourceId)
+        if (!source) return prev
+        const clip = createBrollFromSource(source, prev.playhead)
+        return {
+          ...prev,
+          broll: [...prev.broll, clip],
+          selected: { type: 'broll', id: clip.id },
+          isPlaying: false,
+        }
+      })
+    },
+    [commit],
+  )
+
   const toggleMuteSelected = useCallback(() => {
     setProject((prev) => {
-      if (!prev.selectedClipId) return prev
-      const clip = prev.clips.find((c) => c.id === prev.selectedClipId)
+      const id = selectedClipId(prev)
+      if (!id) return prev
+      const clip = prev.clips.find((c) => c.id === id)
       if (!clip) return prev
       return {
         ...prev,
@@ -346,9 +533,9 @@ export function VideoEditor({ onBack }: Props) {
       return {
         ...prev,
         clips: nextClips,
-        sources: pruneSources(prev.sources, nextClips, false),
+        sources: pruneSources(prev.sources, nextClips, false, prev.broll),
         playhead: Math.min(marks.from, totalDuration(nextClips)),
-        selectedClipId: nextClips[0]?.id ?? null,
+        selected: nextClips[0] ? { type: 'clip', id: nextClips[0].id } : null,
         markIn: null,
         markOut: null,
         isPlaying: false,
@@ -371,9 +558,9 @@ export function VideoEditor({ onBack }: Props) {
       return {
         ...prev,
         clips: nextClips,
-        sources: pruneSources(prev.sources, nextClips, false),
+        sources: pruneSources(prev.sources, nextClips, false, prev.broll),
         playhead: 0,
-        selectedClipId: nextClips[0]?.id ?? null,
+        selected: nextClips[0] ? { type: 'clip', id: nextClips[0].id } : null,
         markIn: null,
         markOut: null,
         isPlaying: false,
@@ -383,8 +570,8 @@ export function VideoEditor({ onBack }: Props) {
 
   const stepPlayhead = useCallback((delta: number) => {
     setProject((prev) => {
-      const total = totalDuration(prev.clips)
-      const playhead = Math.max(0, Math.min(prev.playhead + delta, total || 0))
+      const span = projectSpan(prev)
+      const playhead = Math.max(0, Math.min(prev.playhead + delta, span || 0))
       return {
         ...prev,
         isPlaying: false,
@@ -392,6 +579,47 @@ export function VideoEditor({ onBack }: Props) {
       }
     })
   }, [])
+
+  async function handleSave() {
+    setSaveError(null)
+    setSaveStatus(null)
+    try {
+      if (!project.sources.length) {
+        setSaveError(t('video.saveNeedsMedia'))
+        return
+      }
+      const saved = await saveVideoProject(project)
+      setProject((prev) => ({
+        ...prev,
+        projectId: saved.projectId,
+        projectName: saved.projectName,
+      }))
+      setSaveStatus(t('files.saved'))
+      setListKey((k) => k + 1)
+      setSideTab('projects')
+    } catch (err) {
+      setSaveError(
+        err instanceof Error ? te(err.message) : t('files.saveFailed'),
+      )
+    }
+  }
+
+  async function handleLoad(id: string) {
+    setSaveError(null)
+    setSaveStatus(null)
+    try {
+      const loaded = await loadVideoProject(id)
+      revokeAll(projectRef.current.sources)
+      setProject(loaded)
+      resetHistory()
+      setSaveStatus(t('video.projectLoaded'))
+      setSideTab('projects')
+    } catch (err) {
+      setSaveError(
+        err instanceof Error ? te(err.message) : t('files.loadFailed'),
+      )
+    }
+  }
 
   const canSplit = (() => {
     const hit = findClipAtPlayhead(project.clips, project.playhead)
@@ -408,6 +636,10 @@ export function VideoEditor({ onBack }: Props) {
     totalDuration(project.clips),
   ) != null
 
+  const hasSelection = Boolean(project.selected)
+  const hasClipSelection = selectedClipId(project) != null
+  const hasTimeline = projectSpan(project) > 0
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null
@@ -422,6 +654,11 @@ export function VideoEditor({ onBack }: Props) {
       const key = e.key.toLowerCase()
       const mod = e.metaKey || e.ctrlKey
 
+      if (mod && key === 's') {
+        e.preventDefault()
+        void handleSave()
+        return
+      }
       if (mod && key === 'z' && !e.shiftKey) {
         e.preventDefault()
         undo()
@@ -456,7 +693,7 @@ export function VideoEditor({ onBack }: Props) {
       if (e.key === 'End') {
         e.preventDefault()
         stopPlayback()
-        setPlayhead(totalDuration(projectRef.current.clips), { snap: false })
+        setPlayhead(projectSpan(projectRef.current), { snap: false })
         return
       }
       if (e.key === 'ArrowLeft') {
@@ -472,6 +709,11 @@ export function VideoEditor({ onBack }: Props) {
       if (key === 's' && !mod) {
         e.preventDefault()
         handleSplit()
+        return
+      }
+      if (key === 't' && !mod) {
+        e.preventDefault()
+        addText()
         return
       }
       if (key === 'd' && !mod) {
@@ -527,7 +769,7 @@ export function VideoEditor({ onBack }: Props) {
       }
       if (
         (e.key === 'Delete' || e.key === 'Backspace') &&
-        projectRef.current.selectedClipId
+        projectRef.current.selected
       ) {
         e.preventDefault()
         handleDelete()
@@ -551,22 +793,17 @@ export function VideoEditor({ onBack }: Props) {
     redo,
     stopPlayback,
     setPlayhead,
+    addText,
   ])
 
   useEffect(() => {
     return () => {
-      for (const s of projectRef.current.sources) {
-        URL.revokeObjectURL(s.objectUrl)
-      }
+      revokeAll(projectRef.current.sources)
     }
   }, [])
 
-  const basePx =
-    totalDuration(project.clips) > 120
-      ? 8
-      : totalDuration(project.clips) > 60
-        ? 12
-        : 24
+  const span = projectSpan(project)
+  const basePx = span > 120 ? 8 : span > 60 ? 12 : 24
   const pxPerSec = basePx * project.zoom
 
   return (
@@ -585,6 +822,14 @@ export function VideoEditor({ onBack }: Props) {
           <button
             type="button"
             className="header-btn"
+            onClick={() => void handleSave()}
+            title="⌘S"
+          >
+            {t('common.save')}
+          </button>
+          <button
+            type="button"
+            className="header-btn"
             onClick={openSettings}
           >
             {t('common.settings')}
@@ -593,76 +838,146 @@ export function VideoEditor({ onBack }: Props) {
         </div>
       </header>
 
-      <div className="video-editor-body">
-        <VideoToolbar
-          fileRef={fileRef}
-          hasClips={project.clips.length > 0}
-          isPlaying={project.isPlaying}
-          canSplit={canSplit}
-          hasSelection={Boolean(project.selectedClipId)}
-          hasMarks={hasMarks}
-          snap={project.snap}
-          zoom={project.zoom}
-          canUndo={canUndo}
-          canRedo={canRedo}
-          onUndo={undo}
-          onRedo={redo}
-          onImport={onImport}
-          onTogglePlay={togglePlay}
-          onSplit={handleSplit}
-          onDelete={handleDelete}
-          onDuplicate={handleDuplicate}
-          onMoveLeft={() => handleMove(-1)}
-          onMoveRight={() => handleMove(1)}
-          onMarkIn={setMarkIn}
-          onMarkOut={setMarkOut}
-          onClearMarks={clearMarks}
-          onExtract={handleExtract}
-          onIsolate={handleIsolate}
-          onToggleSnap={() =>
-            setProject((p) => ({ ...p, snap: !p.snap }))
-          }
-          onZoom={(dir) =>
-            setProject((p) => ({
-              ...p,
-              zoom: Math.max(
-                0.35,
-                Math.min(4, +(p.zoom + dir * 0.25).toFixed(2)),
-              ),
-            }))
-          }
-          onStep={stepPlayhead}
-          masterVolume={project.masterVolume}
-          onMasterVolume={(v) =>
-            setProject((p) => ({ ...p, masterVolume: v }))
-          }
-        />
+      <div className="video-editor-body video-editor-body-split">
+        <aside className="video-side">
+          <div className="video-side-tabs">
+            <button
+              type="button"
+              className={sideTab === 'media' ? 'chip chip-active' : 'chip'}
+              onClick={() => setSideTab('media')}
+            >
+              {t('video.media')}
+            </button>
+            <button
+              type="button"
+              className={sideTab === 'projects' ? 'chip chip-active' : 'chip'}
+              onClick={() => setSideTab('projects')}
+            >
+              {t('video.projects')}
+            </button>
+          </div>
+          {sideTab === 'media' ? (
+            <VideoMediaPanel
+              sources={project.sources}
+              onAddToMain={addSourceToMain}
+              onAddToBroll={addSourceToBroll}
+            />
+          ) : (
+            <VideoProjectsPanel
+              projectId={project.projectId}
+              projectName={project.projectName}
+              onNameChange={(name) =>
+                setProject((p) => ({ ...p, projectName: name }))
+              }
+              onSave={() => void handleSave()}
+              onLoad={(id) => void handleLoad(id)}
+              status={saveStatus}
+              error={saveError}
+              refreshKey={listKey}
+            />
+          )}
+        </aside>
 
-        <VideoPreview
-          project={project}
-          onPlayhead={(t) => setPlayhead(t, { snap: false })}
-          onEndedTimeline={stopPlayback}
-        />
+        <div className="video-main-col">
+          <VideoToolbar
+            fileRef={fileRef}
+            hasClips={hasTimeline}
+            isPlaying={project.isPlaying}
+            canSplit={canSplit}
+            hasSelection={hasSelection}
+            hasClipSelection={hasClipSelection}
+            hasMarks={hasMarks}
+            snap={project.snap}
+            zoom={project.zoom}
+            canUndo={canUndo}
+            canRedo={canRedo}
+            onUndo={undo}
+            onRedo={redo}
+            onImport={onImport}
+            onTogglePlay={togglePlay}
+            onSplit={handleSplit}
+            onDelete={handleDelete}
+            onDuplicate={handleDuplicate}
+            onMoveLeft={() => handleMove(-1)}
+            onMoveRight={() => handleMove(1)}
+            onAddText={addText}
+            onSave={() => void handleSave()}
+            onMarkIn={setMarkIn}
+            onMarkOut={setMarkOut}
+            onClearMarks={clearMarks}
+            onExtract={handleExtract}
+            onIsolate={handleIsolate}
+            onToggleSnap={() =>
+              setProject((p) => ({ ...p, snap: !p.snap }))
+            }
+            onZoom={(dir) =>
+              setProject((p) => ({
+                ...p,
+                zoom: Math.max(
+                  0.35,
+                  Math.min(4, +(p.zoom + dir * 0.25).toFixed(2)),
+                ),
+              }))
+            }
+            onStep={stepPlayhead}
+            masterVolume={project.masterVolume}
+            onMasterVolume={(v) =>
+              setProject((p) => ({ ...p, masterVolume: v }))
+            }
+          />
 
-        <VideoTimeline
-          project={project}
-          pxPerSec={pxPerSec}
-          onSelectClip={(id) =>
-            setProject((prev) =>
-              prev.selectedClipId === id
-                ? prev
-                : { ...prev, selectedClipId: id },
-            )
-          }
-          onPlayhead={(t) => {
-            stopPlayback()
-            setPlayhead(t, { snap: true })
-          }}
-          onTrimClip={handleTrim}
-          onSlipClip={handleSlip}
-          onRollEdit={handleRoll}
-          onPatchClip={handlePatchClip}
-        />
+          <VideoPreview
+            project={project}
+            onPlayhead={(time) => setPlayhead(time, { snap: false })}
+            onEndedTimeline={stopPlayback}
+          />
+
+          <VideoTimeline
+            project={project}
+            pxPerSec={pxPerSec}
+            onSelect={(sel) => setSelection(sel)}
+            onPlayhead={(time) => {
+              stopPlayback()
+              setPlayhead(time, { snap: true })
+            }}
+            onTrimClip={handleTrim}
+            onSlipClip={handleSlip}
+            onRollEdit={handleRoll}
+            onPatchClip={handlePatchClip}
+            onPatchBroll={handlePatchBroll}
+            onPatchText={handlePatchText}
+            onMoveBroll={handleMoveBroll}
+            onMoveText={handleMoveText}
+            onDeleteBroll={(id) =>
+              commit((prev) => ({
+                ...prev,
+                broll: prev.broll.filter((c) => c.id !== id),
+                sources: pruneSourcesWithOverlays(
+                  prev.sources,
+                  prev.clips,
+                  prev.broll.filter((c) => c.id !== id),
+                  false,
+                ),
+                selected:
+                  prev.selected?.type === 'broll' && prev.selected.id === id
+                    ? null
+                    : prev.selected,
+                isPlaying: false,
+              }))
+            }
+            onDeleteText={(id) =>
+              commit((prev) => ({
+                ...prev,
+                texts: prev.texts.filter((tx) => tx.id !== id),
+                selected:
+                  prev.selected?.type === 'text' && prev.selected.id === id
+                    ? null
+                    : prev.selected,
+                isPlaying: false,
+              }))
+            }
+          />
+        </div>
       </div>
     </div>
   )

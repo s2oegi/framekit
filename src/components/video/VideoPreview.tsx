@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react'
+import { getFont } from '../../fonts'
 import { useI18n } from '../../i18n/I18nContext'
+import { activeTexts, projectSpan, resolveBroll } from '../../video/broll'
 import { peakMeterFromMix, resolveMix, type MixLayer } from '../../video/mix'
 import {
   formatTime,
   getSource,
-  totalDuration,
 } from '../../video/timeline'
 import type { VideoProject } from '../../video/types'
 
@@ -100,6 +101,52 @@ function bindSource(
   return true
 }
 
+function syncBroll(
+  el: HTMLVideoElement,
+  slot: SlotState,
+  project: VideoProject,
+  playhead: number,
+  playing: boolean,
+) {
+  const hit = resolveBroll(project, playhead)
+  if (!hit) {
+    el.style.opacity = '0'
+    el.volume = 0
+    el.muted = true
+    if (!el.paused) el.pause()
+    slot.clipId = null
+    return
+  }
+  const src = getSource(project, hit.clip.sourceId)
+  if (!src) return
+
+  if (slot.url !== src.objectUrl) {
+    el.src = src.objectUrl
+    slot.url = src.objectUrl
+    slot.clipId = hit.clip.id
+    try {
+      el.currentTime = Math.max(0, hit.sourceTime)
+    } catch {
+      // ignore
+    }
+  } else {
+    const force = slot.clipId !== hit.clip.id
+    slot.clipId = hit.clip.id
+    seekIfNeeded(el, hit.sourceTime, playing, force)
+  }
+
+  el.style.opacity = String(hit.opacity)
+  el.style.zIndex = '4'
+  const silent = hit.volume <= 0.001
+  el.muted = silent
+  el.volume = silent ? 0 : Math.max(0, Math.min(1, hit.volume))
+  if (playing) {
+    if (el.paused) void el.play().catch(() => undefined)
+  } else {
+    el.pause()
+  }
+}
+
 export function VideoPreview({
   project,
   onPlayhead,
@@ -110,8 +157,11 @@ export function VideoPreview({
   tRef.current = t
   const aRef = useRef<HTMLVideoElement>(null)
   const bRef = useRef<HTMLVideoElement>(null)
+  const cRef = useRef<HTMLVideoElement>(null)
+  const overlayRef = useRef<HTMLDivElement>(null)
   const slotA = useRef<SlotState>({ url: null, clipId: null })
   const slotB = useRef<SlotState>({ url: null, clipId: null })
+  const slotC = useRef<SlotState>({ url: null, clipId: null })
   const rafRef = useRef(0)
   const projectRef = useRef(project)
   const playheadRef = useRef(project.playhead)
@@ -123,7 +173,6 @@ export function VideoPreview({
   const statusRef = useRef<HTMLSpanElement>(null)
   const blackRef = useRef<HTMLDivElement>(null)
 
-  // Keep project ref fresh; only mirror playhead into local clock when paused
   useEffect(() => {
     projectRef.current = project
     if (!project.isPlaying) {
@@ -131,24 +180,28 @@ export function VideoPreview({
     }
   }, [project])
 
-  const total = totalDuration(project.clips)
-  const hasMedia = project.clips.length > 0
+  const total = projectSpan(project)
+  const hasMedia =
+    project.clips.length > 0 ||
+    project.broll.length > 0 ||
+    project.texts.length > 0
   const staticMix = resolveMix(project, project.playhead)
+  const visibleTexts = activeTexts(project.texts, project.playhead)
 
-  // Reset slot cache when media mounts/unmounts
   useEffect(() => {
     if (!hasMedia) {
       slotA.current = { url: null, clipId: null }
       slotB.current = { url: null, clipId: null }
+      slotC.current = { url: null, clipId: null }
     }
   }, [hasMedia])
 
-  // Scrub / paused sync
   useEffect(() => {
     if (project.isPlaying || !hasMedia) return
     const a = aRef.current
     const b = bRef.current
-    if (!a || !b) return
+    const c = cRef.current
+    if (!a || !b || !c) return
 
     const gen = ++scrubGen.current
     const mix = resolveMix(project, project.playhead)
@@ -176,13 +229,13 @@ export function VideoPreview({
       }
       setLayerVisual(a, mix.layers[0], 'under', wipe, dual)
       setLayerVisual(b, mix.layers[1], 'over', wipe, dual)
+      syncBroll(c, slotC.current, project, project.playhead, false)
       if (blackRef.current) blackRef.current.style.opacity = String(mix.black)
       if (meterRef.current) {
         meterRef.current.style.height = `${peakMeterFromMix(mix) * 100}%`
       }
     }
 
-    // Wait a tick if we just changed src
     if (a.readyState < 2 || (mix.layers[1] && b.readyState < 2)) {
       const onReady = () => {
         a.removeEventListener('loadeddata', onReady)
@@ -191,7 +244,6 @@ export function VideoPreview({
       }
       a.addEventListener('loadeddata', onReady)
       b.addEventListener('loadeddata', onReady)
-      // Fallback if already buffered
       requestAnimationFrame(apply)
       return () => {
         a.removeEventListener('loadeddata', onReady)
@@ -204,17 +256,18 @@ export function VideoPreview({
     project.isPlaying,
     project.playhead,
     project.clips,
+    project.broll,
     project.masterVolume,
     project.sources,
     hasMedia,
   ])
 
-  // Playback loop
   useEffect(() => {
     if (!project.isPlaying) {
       cancelAnimationFrame(rafRef.current)
       aRef.current?.pause()
       bRef.current?.pause()
+      cRef.current?.pause()
       return
     }
 
@@ -229,7 +282,7 @@ export function VideoPreview({
       const dt = Math.min(0.05, Math.max(0, (now - lastTick.current) / 1000))
       lastTick.current = now
 
-      const end = totalDuration(p.clips)
+      const end = projectSpan(p)
       if (end <= 0) {
         onEndedTimeline()
         return
@@ -247,6 +300,7 @@ export function VideoPreview({
       const mix = resolveMix(p, next)
       const a = aRef.current
       const b = bRef.current
+      const c = cRef.current
       const wipe = mix.layers.find((l) => l.wipe != null)?.wipe ?? null
       const dual = mix.layers.length === 2
 
@@ -270,6 +324,7 @@ export function VideoPreview({
         } else {
           a.pause()
           slotA.current.clipId = null
+          setLayerVisual(a, undefined, 'under', null, false)
         }
 
         if (layerB) {
@@ -288,11 +343,14 @@ export function VideoPreview({
         } else {
           b.pause()
           slotB.current.clipId = null
+          setLayerVisual(b, undefined, 'over', null, false)
         }
 
         setLayerVisual(a, layerA, 'under', wipe, dual)
         setLayerVisual(b, layerB, 'over', wipe, dual)
       }
+
+      if (c) syncBroll(c, slotC.current, p, next, true)
 
       if (blackRef.current) blackRef.current.style.opacity = String(mix.black)
       if (meterRef.current) {
@@ -308,6 +366,31 @@ export function VideoPreview({
         }${
           dual ? ` · ${tRef.current('video.transitionActive')}` : ''
         } · ${formatTime(primary.sourceTime)}`
+      }
+
+      // Live text overlay during playback
+      if (overlayRef.current) {
+        const texts = activeTexts(p.texts, next)
+        overlayRef.current.replaceChildren()
+        for (const tx of texts) {
+          const node = document.createElement('div')
+          node.className = 'video-text-overlay'
+          node.textContent = tx.text
+          const font = getFont(tx.font)
+          node.style.left = `${tx.x}%`
+          node.style.top = `${tx.y}%`
+          node.style.fontSize = `${tx.fontSize}px`
+          node.style.color = tx.color
+          node.style.fontFamily = font.family
+          node.style.textAlign = tx.align
+          node.style.transform =
+            tx.align === 'left'
+              ? 'translate(0, -50%)'
+              : tx.align === 'right'
+                ? 'translate(-100%, -50%)'
+                : 'translate(-50%, -50%)'
+          overlayRef.current.appendChild(node)
+        }
       }
 
       if (now - lastUiPush.current > 80) {
@@ -339,12 +422,46 @@ export function VideoPreview({
               playsInline
               preload="auto"
             />
+            <video
+              ref={cRef}
+              className="video-preview-el video-preview-layer video-preview-broll"
+              playsInline
+              preload="auto"
+            />
             <div
               ref={blackRef}
               className="video-preview-black"
               style={{ opacity: staticMix.black }}
               aria-hidden
             />
+            <div ref={overlayRef} className="video-preview-overlays" aria-hidden>
+              {!project.isPlaying &&
+                visibleTexts.map((tx) => {
+                  const font = getFont(tx.font)
+                  return (
+                    <div
+                      key={tx.id}
+                      className="video-text-overlay"
+                      style={{
+                        left: `${tx.x}%`,
+                        top: `${tx.y}%`,
+                        fontSize: tx.fontSize,
+                        color: tx.color,
+                        fontFamily: font.family,
+                        textAlign: tx.align,
+                        transform:
+                          tx.align === 'left'
+                            ? 'translate(0, -50%)'
+                            : tx.align === 'right'
+                              ? 'translate(-100%, -50%)'
+                              : 'translate(-50%, -50%)',
+                      }}
+                    >
+                      {tx.text}
+                    </div>
+                  )
+                })}
+            </div>
           </>
         ) : (
           <div className="video-preview-empty">

@@ -245,8 +245,12 @@ export function pruneSources(
   sources: VideoSource[],
   clips: VideoClip[],
   revoke = false,
+  broll: { sourceId: string }[] = [],
 ): VideoSource[] {
-  const used = new Set(clips.map((c) => c.sourceId))
+  const used = new Set([
+    ...clips.map((c) => c.sourceId),
+    ...broll.map((c) => c.sourceId),
+  ])
   return sources.filter((s) => {
     if (used.has(s.id)) return true
     if (revoke) URL.revokeObjectURL(s.objectUrl)
@@ -266,22 +270,19 @@ export function rippleDeleteClip(
   const item = layout.find((l) => l.clip.id === clipId)
   const span = item ? item.end - item.start : clipDuration(clip)
   const clips = project.clips.filter((c) => c.id !== clipId)
-  const sources = pruneSources(project.sources, clips)
+  const sources = pruneSources(project.sources, clips, false, project.broll)
   let playhead = project.playhead
   if (playhead > start + span) playhead -= span
   else if (playhead > start) playhead = start
   playhead = Math.min(playhead, totalDuration(clips))
+  const idx = project.clips.findIndex((c) => c.id === clipId)
+  const nextSel =
+    clips[Math.min(idx, Math.max(0, clips.length - 1))]?.id ?? null
   return {
     ...project,
     clips,
     sources,
-    selectedClipId:
-      clips[
-        Math.min(
-          project.clips.findIndex((c) => c.id === clipId),
-          Math.max(0, clips.length - 1),
-        )
-      ]?.id ?? null,
+    selected: nextSel ? { type: 'clip', id: nextSel } : null,
     playhead,
     isPlaying: false,
   }

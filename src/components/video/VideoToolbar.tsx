@@ -7,6 +7,7 @@ type Props = {
   isPlaying: boolean
   canSplit: boolean
   hasSelection: boolean
+  hasClipSelection: boolean
   hasMarks: boolean
   snap: boolean
   zoom: number
@@ -17,6 +18,8 @@ type Props = {
   onDuplicate: () => void
   onMoveLeft: () => void
   onMoveRight: () => void
+  onAddText: () => void
+  onSave: () => void
   onMarkIn: () => void
   onMarkOut: () => void
   onClearMarks: () => void
@@ -39,6 +42,7 @@ export function VideoToolbar({
   isPlaying,
   canSplit,
   hasSelection,
+  hasClipSelection,
   hasMarks,
   snap,
   zoom,
@@ -49,6 +53,8 @@ export function VideoToolbar({
   onDuplicate,
   onMoveLeft,
   onMoveRight,
+  onAddText,
+  onSave,
   onMarkIn,
   onMarkOut,
   onClearMarks,
@@ -105,6 +111,22 @@ export function VideoToolbar({
         <button
           type="button"
           className="header-btn"
+          onClick={onAddText}
+          title="T"
+        >
+          {t('video.addText')}
+        </button>
+        <button
+          type="button"
+          className="header-btn"
+          onClick={onSave}
+          title="⌘S"
+        >
+          {t('common.save')}
+        </button>
+        <button
+          type="button"
+          className="header-btn"
           onClick={onTogglePlay}
           disabled={!hasClips}
           title="Space / K"
@@ -137,7 +159,7 @@ export function VideoToolbar({
           className="header-btn"
           onClick={onSplit}
           disabled={!canSplit}
-          title="S — vágás a playheadnél"
+          title="S"
         >
           {t('video.split')}
         </button>
@@ -145,7 +167,7 @@ export function VideoToolbar({
           type="button"
           className="header-btn"
           onClick={onDuplicate}
-          disabled={!hasSelection}
+          disabled={!hasClipSelection}
           title="D"
         >
           {t('video.duplicate')}
@@ -154,8 +176,7 @@ export function VideoToolbar({
           type="button"
           className="header-btn"
           onClick={onMoveLeft}
-          disabled={!hasSelection}
-          title="Clip balra"
+          disabled={!hasClipSelection}
         >
           ←
         </button>
@@ -163,8 +184,7 @@ export function VideoToolbar({
           type="button"
           className="header-btn"
           onClick={onMoveRight}
-          disabled={!hasSelection}
-          title="Clip jobbra"
+          disabled={!hasClipSelection}
         >
           →
         </button>
@@ -173,7 +193,7 @@ export function VideoToolbar({
           className="header-btn"
           onClick={onDelete}
           disabled={!hasSelection}
-          title="Delete — ripple törlés"
+          title="Delete"
         >
           {t('video.rippleDelete')}
         </button>
@@ -185,7 +205,7 @@ export function VideoToolbar({
           className="header-btn"
           onClick={onMarkIn}
           disabled={!hasClips}
-          title="I — mark in"
+          title="I"
         >
           In
         </button>
@@ -194,7 +214,7 @@ export function VideoToolbar({
           className="header-btn"
           onClick={onMarkOut}
           disabled={!hasClips}
-          title="O — mark out"
+          title="O"
         >
           Out
         </button>
@@ -203,7 +223,7 @@ export function VideoToolbar({
           className="header-btn"
           onClick={onClearMarks}
           disabled={!hasMarks}
-          title="X — jelek törlése"
+          title="X"
         >
           X
         </button>
@@ -212,7 +232,7 @@ export function VideoToolbar({
           className="header-btn"
           onClick={onExtract}
           disabled={!hasMarks}
-          title="E — tartomány kivágása (ripple)"
+          title="E"
         >
           {t('video.extract')}
         </button>
@@ -232,7 +252,6 @@ export function VideoToolbar({
           type="button"
           className={snap ? 'header-btn header-btn-accent' : 'header-btn'}
           onClick={onToggleSnap}
-          title="Snap vágásokhoz"
         >
           {t('video.snap')}
         </button>
@@ -240,7 +259,6 @@ export function VideoToolbar({
           type="button"
           className="header-btn"
           onClick={() => onZoom(-1)}
-          title="Zoom −"
         >
           −
         </button>
@@ -249,7 +267,6 @@ export function VideoToolbar({
           type="button"
           className="header-btn"
           onClick={() => onZoom(1)}
-          title="Zoom +"
         >
           +
         </button>
@@ -265,7 +282,6 @@ export function VideoToolbar({
             step={0.01}
             value={masterVolume}
             onChange={(e) => onMasterVolume(Number(e.target.value))}
-            title="Fő hangerő"
           />
           <span className="video-zoom-label">
             {Math.round(masterVolume * 100)}%
