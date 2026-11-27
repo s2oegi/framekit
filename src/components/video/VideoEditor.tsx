@@ -580,15 +580,16 @@ export function VideoEditor({ onBack }: Props) {
     })
   }, [])
 
-  async function handleSave() {
+  const handleSave = useCallback(async () => {
     setSaveError(null)
     setSaveStatus(null)
+    const current = projectRef.current
     try {
-      if (!project.sources.length) {
+      if (!current.sources.length) {
         setSaveError(t('video.saveNeedsMedia'))
         return
       }
-      const saved = await saveVideoProject(project)
+      const saved = await saveVideoProject(current)
       setProject((prev) => ({
         ...prev,
         projectId: saved.projectId,
@@ -602,24 +603,27 @@ export function VideoEditor({ onBack }: Props) {
         err instanceof Error ? te(err.message) : t('files.saveFailed'),
       )
     }
-  }
+  }, [t, te])
 
-  async function handleLoad(id: string) {
-    setSaveError(null)
-    setSaveStatus(null)
-    try {
-      const loaded = await loadVideoProject(id)
-      revokeAll(projectRef.current.sources)
-      setProject(loaded)
-      resetHistory()
-      setSaveStatus(t('video.projectLoaded'))
-      setSideTab('projects')
-    } catch (err) {
-      setSaveError(
-        err instanceof Error ? te(err.message) : t('files.loadFailed'),
-      )
-    }
-  }
+  const handleLoad = useCallback(
+    async (id: string) => {
+      setSaveError(null)
+      setSaveStatus(null)
+      try {
+        const loaded = await loadVideoProject(id)
+        revokeAll(projectRef.current.sources)
+        setProject(loaded)
+        resetHistory()
+        setSaveStatus(t('video.projectLoaded'))
+        setSideTab('projects')
+      } catch (err) {
+        setSaveError(
+          err instanceof Error ? te(err.message) : t('files.loadFailed'),
+        )
+      }
+    },
+    [resetHistory, t, te],
+  )
 
   const canSplit = (() => {
     const hit = findClipAtPlayhead(project.clips, project.playhead)
@@ -794,6 +798,7 @@ export function VideoEditor({ onBack }: Props) {
     stopPlayback,
     setPlayhead,
     addText,
+    handleSave,
   ])
 
   useEffect(() => {

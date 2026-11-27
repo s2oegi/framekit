@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import type { Session } from '../lib/authStore'
 import type { ProjectKind } from '../presets'
 import type { SavedProject } from '../lib/projectStore'
 import { listProjects } from '../lib/projectStore'
 import { useI18n } from '../i18n/I18nContext'
 import { useSettings } from '../settings/SettingsContext'
+import { GamesModal } from './games/GamesModal'
 
 type Props = {
   session: Session | null
@@ -24,6 +26,7 @@ export function ModeSelect({
 }: Props) {
   const { t } = useI18n()
   const { openSettings } = useSettings()
+  const [gamesOpen, setGamesOpen] = useState(false)
   const recent = listProjects(session?.userId ?? null).slice(0, 4)
 
   return (
@@ -31,6 +34,13 @@ export function ModeSelect({
       <div className="mode-glow" aria-hidden />
 
       <div className="mode-account">
+        <button
+          type="button"
+          className="header-btn header-btn-accent"
+          onClick={() => setGamesOpen(true)}
+        >
+          {t('games.menu')}
+        </button>
         <button
           type="button"
           className="header-btn"
@@ -116,6 +126,8 @@ export function ModeSelect({
           </div>
         </section>
       )}
+
+      <GamesModal open={gamesOpen} onClose={() => setGamesOpen(false)} />
     </div>
   )
 }

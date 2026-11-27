@@ -195,7 +195,7 @@ export function VideoToolbar({
           disabled={!hasSelection}
           title="Delete"
         >
-          {t('video.rippleDelete')}
+          {hasClipSelection ? t('video.rippleDelete') : t('common.delete')}
         </button>
       </div>
 

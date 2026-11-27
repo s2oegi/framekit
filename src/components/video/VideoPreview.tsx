@@ -136,7 +136,8 @@ function syncBroll(
   }
 
   el.style.opacity = String(hit.opacity)
-  el.style.zIndex = '4'
+  // Above main mix + fade-to-black (z=5), below text overlays (z=7)
+  el.style.zIndex = '6'
   const silent = hit.volume <= 0.001
   el.muted = silent
   el.volume = silent ? 0 : Math.max(0, Math.min(1, hit.volume))
