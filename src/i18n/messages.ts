@@ -45,11 +45,6 @@ const hu = {
   'home.videoBeta': 'Beta',
   'home.recent': 'Legutóbbi design projektek',
 
-  'games.menu': 'Játékok',
-  'games.title': 'Játékok',
-  'games.matchingTitle': 'Matcher',
-  'games.matchingDesc': 'Párosítsd az előadókat a slágereikkel — ország, műfaj, napi kihívás.',
-
   'auth.titleLogin': 'Bejelentkezés',
   'auth.titleRegister': 'Profil létrehozása',
   'auth.note':
@@ -324,11 +319,6 @@ const en: Record<MessageKey, string> = {
   'home.videoDesc': 'Text · B-roll · browser save',
   'home.videoBeta': 'Beta',
   'home.recent': 'Recent design projects',
-
-  'games.menu': 'Games',
-  'games.title': 'Games',
-  'games.matchingTitle': 'Matcher',
-  'games.matchingDesc': 'Match artists with their hit songs — country, genre, daily challenge.',
 
   'auth.titleLogin': 'Sign in',
   'auth.titleRegister': 'Create profile',
