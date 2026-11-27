@@ -849,165 +849,29 @@ html[data-theme='day'] .mode-card {
   z-index: 40;
 }
 
-.games-modal {
-  width: min(100%, 28rem);
+.games-modal-play {
+  width: min(100%, 72rem);
+  max-height: min(96vh, 56rem);
+  padding: 0.85rem 0.85rem 0.95rem;
+  gap: 0.65rem;
 }
 
-.games-modal-wide {
-  width: min(100%, 34rem);
-}
-
-.games-list {
+.games-modal-title {
   display: grid;
-  gap: 0.85rem;
-}
-
-.games-card {
-  appearance: none;
-  border: 1px solid var(--line);
-  border-radius: 0.85rem;
-  background: linear-gradient(160deg, var(--panel-2), var(--panel));
-  color: var(--text);
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 0.75rem;
-  align-items: center;
-  text-align: left;
-  padding: 0.85rem 0.9rem;
-  cursor: pointer;
-  transition: border-color 0.15s ease, transform 0.15s ease;
-}
-
-.games-card:hover {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-  transform: translateY(-1px);
-}
-
-.games-card-icon {
-  font-size: 1.55rem;
-  line-height: 1;
-}
-
-.games-card-copy {
-  display: grid;
-  gap: 0.2rem;
+  gap: 0.15rem;
   min-width: 0;
 }
 
-.games-card-copy strong {
-  font-size: 0.98rem;
+.games-modal-title .field-note {
+  margin: 0;
 }
 
-.games-card-copy span {
-  color: var(--muted);
-  font-size: 0.82rem;
-}
-
-.games-card-go {
-  color: var(--accent);
-  font-size: 1.15rem;
-}
-
-.matching-game {
-  display: grid;
-  gap: 0.85rem;
-}
-
-.matching-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem 0.85rem;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.matching-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem 0.9rem;
-  color: var(--muted);
-  font-size: 0.82rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.matching-win {
-  display: grid;
-  gap: 0.35rem;
-  justify-items: start;
-  padding: 0.75rem 0.85rem;
-  border-radius: 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
-  background: var(--accent-dim);
-}
-
-.matching-win strong {
-  color: var(--accent);
-}
-
-.matching-win span {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.matching-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.55rem;
-}
-
-.matching-card {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  aspect-ratio: 1;
-  perspective: 700px;
-  padding: 0;
-  cursor: pointer;
-}
-
-.matching-card-inner {
-  position: relative;
+.games-frame {
   width: 100%;
-  height: 100%;
-  transform-style: preserve-3d;
-  transition: transform 0.35s ease;
-  border-radius: 0.7rem;
-}
-
-.matching-card-flipped .matching-card-inner,
-.matching-card-matched .matching-card-inner {
-  transform: rotateY(180deg);
-}
-
-.matching-face {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  backface-visibility: hidden;
-  border-radius: 0.7rem;
+  height: min(82vh, 48rem);
   border: 1px solid var(--line);
-  font-size: clamp(1.35rem, 4vw, 1.85rem);
-}
-
-.matching-face-back {
-  background: linear-gradient(
-    145deg,
-    color-mix(in srgb, var(--accent) 35%, var(--panel-2)),
-    var(--panel)
-  );
-  color: color-mix(in srgb, var(--accent) 70%, var(--text));
-  font-size: 1rem;
-}
-
-.matching-face-front {
-  transform: rotateY(180deg);
-  background: var(--panel-2);
-}
-
-.matching-card-matched .matching-face-front {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-  box-shadow: inset 0 0 0 1px var(--accent-dim);
+  border-radius: 0.75rem;
+  background: #0a0c10;
 }
 
 .modal {
